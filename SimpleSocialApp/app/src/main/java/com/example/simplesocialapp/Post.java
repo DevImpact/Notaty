@@ -1,18 +1,24 @@
 package com.example.simplesocialapp;
 
-import java.util.UUID;
+import com.google.firebase.Timestamp; // Firestore Timestamp
+import com.google.firebase.firestore.FieldValue; // For serverTimestamp during creation
+import com.google.firebase.firestore.ServerTimestamp; // Annotation for automatic timestamp
 
 public class Post {
-    private String postId;
-    private String userEmail;
+    private String postId; // Document ID from Firestore
+    private String userId;
+    private String username; // Or userEmail, display name
     private String content;
-    private long timestamp;
+    private @ServerTimestamp Timestamp timestamp; // Automatically set by Firestore on server
 
-    public Post(String userEmail, String content) {
-        this.postId = UUID.randomUUID().toString();
-        this.userEmail = userEmail;
+    // Empty constructor required for Firestore deserialization
+    public Post() {}
+
+    public Post(String userId, String username, String content) {
+        this.userId = userId;
+        this.username = username;
         this.content = content;
-        this.timestamp = System.currentTimeMillis();
+        // Timestamp is set by @ServerTimestamp or FieldValue.serverTimestamp() during write
     }
 
     // Getters
@@ -20,15 +26,40 @@ public class Post {
         return postId;
     }
 
-    public String getUserEmail() {
-        return userEmail;
+    public String getUserId() {
+        return userId;
+    }
+
+    public String getUsername() {
+        return username;
     }
 
     public String getContent() {
         return content;
     }
 
-    public long getTimestamp() {
+    public Timestamp getTimestamp() {
         return timestamp;
+    }
+
+    // Setters
+    public void setPostId(String postId) {
+        this.postId = postId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public void setContent(String content) {
+        this.content = content;
+    }
+
+    public void setTimestamp(Timestamp timestamp) {
+        this.timestamp = timestamp;
     }
 }

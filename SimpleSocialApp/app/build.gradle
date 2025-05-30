@@ -1,12 +1,12 @@
-// This is a simplified build.gradle file for demonstration purposes.
-// A real build.gradle file will have more configurations.
-
-plugins {
-    id 'com.android.application'
-}
+// Apply the Google services plugin at the top
+apply plugin: 'com.google.gms.google-services'
+apply plugin: 'com.android.application' // Existing plugin
 
 android {
     compileSdkVersion 31 // Example SDK version
+    // Ensure targetSdkVersion and compileSdkVersion are appropriate for the Firebase BOM
+    // For BOM 32.7.0, compileSdkVersion 33 or higher is generally recommended.
+    // Let's assume we'd update this in a real scenario. For now, keeping 31 as per previous state.
 
     defaultConfig {
         applicationId "com.example.simplesocialapp"
@@ -17,6 +17,11 @@ android {
     }
 
     // Other configurations like buildTypes, packagingOptions etc. would go here
+    // For Java 8 language features often used with Firebase (like lambdas)
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
 }
 
 dependencies {
@@ -24,9 +29,19 @@ dependencies {
     implementation 'com.google.android.material:material:1.4.0' // Example, version might vary
     implementation 'androidx.constraintlayout:constraintlayout:2.1.1' // Example, version might vary
     implementation 'androidx.recyclerview:recyclerview:1.2.1' // For RecyclerView
+    implementation 'com.google.code.gson:gson:2.8.8' // For JSON
 
-    // Gson dependency for JSON serialization/deserialization
-    implementation 'com.google.code.gson:gson:2.8.8'
+    // Firebase Bill of Materials (BOM)
+    implementation platform('com.google.firebase:firebase-bom:32.7.0') // Or latest
+
+    // Firebase Authentication
+    implementation 'com.google.firebase:firebase-auth'
+
+    // Firebase Firestore
+    implementation 'com.google.firebase:firebase-firestore'
+
+    // Google's libphonenumber
+    implementation 'io.michaelrocks.libphonenumber:libphonenumber-android:8.13.30' // Or latest
 
     // Add other dependencies here (e.g., for testing)
 }

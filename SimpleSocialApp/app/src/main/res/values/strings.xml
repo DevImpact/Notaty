@@ -1,3 +1,15 @@
 <resources>
     <string name="app_name">SimpleSocialApp</string>
+
+    <string-array name="relationship_statuses">
+        <item>Single</item>
+        <item>Married</item>
+        <item>In a relationship</item>
+        <item>Engaged</item>
+        <item>Divorced</item>
+        <item>Widowed</item>
+        <item>Separated</item>
+        <item>Complicated</item>
+        <item>Prefer not to say</item>
+    </string-array>
 </resources>

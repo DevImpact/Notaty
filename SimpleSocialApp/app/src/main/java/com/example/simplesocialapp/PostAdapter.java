@@ -6,7 +6,9 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+import com.google.firebase.Timestamp; // Import Firestore Timestamp
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -16,7 +18,7 @@ public class PostAdapter extends RecyclerView.Adapter<PostAdapter.PostViewHolder
     private List<Post> postList;
 
     public PostAdapter(List<Post> postList) {
-        this.postList = postList;
+        this.postList = postList != null ? postList : new ArrayList<>();
     }
 
     @NonNull
@@ -29,13 +31,18 @@ public class PostAdapter extends RecyclerView.Adapter<PostAdapter.PostViewHolder
     @Override
     public void onBindViewHolder(@NonNull PostViewHolder holder, int position) {
         Post post = postList.get(position);
-        holder.textViewPostUserEmail.setText(post.getUserEmail());
+        holder.textViewPostUserEmail.setText(post.getUsername()); // Changed from getEmail to getUsername
         holder.textViewPostContent.setText(post.getContent());
 
-        // Format timestamp
-        SimpleDateFormat sdf = new SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault());
-        String formattedDate = sdf.format(new Date(post.getTimestamp()));
-        holder.textViewPostTimestamp.setText(formattedDate);
+        // Format Firestore Timestamp
+        Timestamp timestamp = post.getTimestamp();
+        if (timestamp != null) {
+            Date date = timestamp.toDate(); // Convert Firebase Timestamp to java.util.Date
+            SimpleDateFormat sdf = new SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault());
+            holder.textViewPostTimestamp.setText(sdf.format(date));
+        } else {
+            holder.textViewPostTimestamp.setText("No date"); // Or some placeholder
+        }
     }
 
     @Override
@@ -43,10 +50,13 @@ public class PostAdapter extends RecyclerView.Adapter<PostAdapter.PostViewHolder
         return postList.size();
     }
 
-    public void updatePosts(List<Post> newPosts) {
+    // Method to update the list of posts in the adapter
+    public void setPosts(List<Post> newPosts) {
         this.postList.clear();
-        this.postList.addAll(newPosts);
-        notifyDataSetChanged();
+        if (newPosts != null) {
+            this.postList.addAll(newPosts);
+        }
+        notifyDataSetChanged(); // Notify adapter that data has changed
     }
 
     static class PostViewHolder extends RecyclerView.ViewHolder {

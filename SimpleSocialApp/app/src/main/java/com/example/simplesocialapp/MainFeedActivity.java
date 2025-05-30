@@ -1,8 +1,8 @@
 package com.example.simplesocialapp;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -10,58 +10,74 @@ import android.view.View;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-import java.lang.reflect.Type;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.EventListener;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.ListenerRegistration;
+import com.google.firebase.firestore.Query;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.QuerySnapshot;
+
 import java.util.ArrayList;
 import java.util.List;
 
 public class MainFeedActivity extends AppCompatActivity {
 
+    private static final String TAG = "MainFeedActivity";
+
     private RecyclerView recyclerViewFeed;
     private FloatingActionButton fabCreatePost;
     private PostAdapter postAdapter;
-    private List<Post> postList;
-    private SharedPreferences sharedPreferences;
-    private Gson gson;
-    private String currentUserEmail;
+    private List<Post> postList; // Keep a list to hold posts
 
-    public static final String EXTRA_USER_EMAIL_LOGIN = "com.example.simplesocialapp.USER_EMAIL_LOGIN";
-    private static final String POSTS_KEY = "all_posts";
+    private FirebaseAuth mAuth;
+    private FirebaseFirestore db;
+    private ListenerRegistration postsListener;
+
+    // No longer expecting email via Intent for this activity's primary user identification.
+    // Will rely on FirebaseAuth.getCurrentUser()
+    // public static final String EXTRA_USER_EMAIL_LOGIN = "com.example.simplesocialapp.USER_EMAIL_LOGIN";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main_feed);
 
-        currentUserEmail = getIntent().getStringExtra(EXTRA_USER_EMAIL_LOGIN);
-        if (currentUserEmail == null || currentUserEmail.isEmpty()) {
-            Toast.makeText(this, "User email not available. Please re-login.", Toast.LENGTH_LONG).show();
-            // Navigate back to LoginActivity if email is missing
-            Intent intent = new Intent(MainFeedActivity.this, LoginActivity.class);
+        mAuth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
+
+        FirebaseUser currentUser = mAuth.getCurrentUser();
+        if (currentUser == null) {
+            // Not logged in, redirect to phone number entry
+            Toast.makeText(this, "Please log in to continue.", Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(MainFeedActivity.this, PhoneNumberEntryActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(intent);
             finish();
             return;
         }
+        // Log.d(TAG, "Current user: " + currentUser.getUid() + " Email: " + currentUser.getEmail());
+
 
         recyclerViewFeed = findViewById(R.id.recyclerViewFeed);
         fabCreatePost = findViewById(R.id.fabCreatePost);
-        sharedPreferences = getSharedPreferences("UserPrefs", MODE_PRIVATE);
-        gson = new Gson();
 
         setupRecyclerView();
-        loadPosts();
+        // loadPosts() will be handled by onResume's listener attachment
 
         fabCreatePost.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                // No need to pass user email, CreatePostActivity will get it from FirebaseAuth
                 Intent intent = new Intent(MainFeedActivity.this, CreatePostActivity.class);
-                intent.putExtra(CreatePostActivity.EXTRA_USER_EMAIL, currentUserEmail);
                 startActivity(intent);
             }
         });
@@ -74,23 +90,64 @@ public class MainFeedActivity extends AppCompatActivity {
         recyclerViewFeed.setAdapter(postAdapter);
     }
 
-    private void loadPosts() {
-        String jsonPosts = sharedPreferences.getString(POSTS_KEY, null);
-        if (jsonPosts != null) {
-            Type type = new TypeToken<ArrayList<Post>>() {}.getType();
-            List<Post> loadedPosts = gson.fromJson(jsonPosts, type);
-            if (loadedPosts != null) {
-                postList.clear();
-                postList.addAll(loadedPosts); // Posts are already sorted newest first
-                postAdapter.notifyDataSetChanged();
-            }
+    private void attachPostsListener() {
+        if (postsListener == null) { // Attach listener only if not already attached
+            postsListener = db.collection("posts")
+                    .orderBy("timestamp", Query.Direction.DESCENDING)
+                    .limit(50) // Limiting to 50 posts for performance
+                    .addSnapshotListener(new EventListener<QuerySnapshot>() {
+                        @Override
+                        public void onEvent(@Nullable QuerySnapshot value,
+                                            @Nullable FirebaseFirestoreException error) {
+                            if (error != null) {
+                                Log.w(TAG, "Listen failed.", error);
+                                Toast.makeText(MainFeedActivity.this, "Error loading posts.", Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+
+                            List<Post> newPosts = new ArrayList<>();
+                            if (value != null) {
+                                for (QueryDocumentSnapshot doc : value) {
+                                    Post post = doc.toObject(Post.class);
+                                    post.setPostId(doc.getId()); // Set the document ID as postId
+                                    newPosts.add(post);
+                                }
+                            }
+                            postAdapter.setPosts(newPosts); // Update adapter with new list
+                            Log.d(TAG, "Posts loaded/updated: " + newPosts.size());
+                        }
+                    });
+        }
+    }
+
+    private void detachPostsListener() {
+        if (postsListener != null) {
+            postsListener.remove();
+            postsListener = null;
+            Log.d(TAG, "Posts listener detached.");
         }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        loadPosts();
+        // Check user again in onResume, in case of auth state changes while paused
+        FirebaseUser currentUser = mAuth.getCurrentUser();
+        if (currentUser == null) {
+            Toast.makeText(this, "Please log in to continue.", Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(MainFeedActivity.this, PhoneNumberEntryActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+            return;
+        }
+        attachPostsListener(); // Load/refresh posts
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        detachPostsListener(); // Detach listener to prevent memory leaks and unnecessary background work
     }
 
     @Override
@@ -104,23 +161,21 @@ public class MainFeedActivity extends AppCompatActivity {
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         int itemId = item.getItemId();
         if (itemId == R.id.action_profile) {
-            Intent intent = new Intent(MainFeedActivity.this, UserProfileActivity.class);
-            intent.putExtra(UserProfileActivity.EXTRA_USER_EMAIL_PROFILE, currentUserEmail);
-            startActivity(intent);
+            FirebaseUser currentUser = mAuth.getCurrentUser();
+            if (currentUser != null) {
+                Intent intent = new Intent(MainFeedActivity.this, UserProfileActivity.class);
+                // UserProfileActivity will get current user's UID from FirebaseAuth
+                // No need to pass UID if it's always the current user's profile
+                // intent.putExtra(UserProfileActivity.EXTRA_USER_ID_PROFILE, currentUser.getUid());
+                startActivity(intent);
+            } else {
+                 Toast.makeText(this, "Not logged in.", Toast.LENGTH_SHORT).show();
+            }
             return true;
         } else if (itemId == R.id.action_logout) {
-            // Clear SharedPreferences or specific keys
-            // For this example, clearing all UserPrefs. Be cautious with this in a real app.
-            SharedPreferences.Editor editor = sharedPreferences.edit();
-            // editor.remove("currentUserEmail"); // Example of removing specific key
-            // editor.remove(currentUserEmail + "_password"); // Example
-            // editor.remove(currentUserEmail + "_username"); // Example
-            editor.clear(); // Clears all data in "UserPrefs"
-            editor.apply();
-
+            mAuth.signOut(); // Sign out from Firebase
             Toast.makeText(this, "Logged out successfully", Toast.LENGTH_SHORT).show();
-
-            Intent intent = new Intent(MainFeedActivity.this, LoginActivity.class);
+            Intent intent = new Intent(MainFeedActivity.this, PhoneNumberEntryActivity.class); // Or LoginActivity if you have one
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(intent);
             finish();
